@@ -41,7 +41,7 @@ app.post('/api/search', async (req, res) => {
     const googleUrl = `https://www.google.com/search?q=${encodeURIComponent(searchQuery)}&hl=it&gl=it&num=10`;
     
     // ScraperAPI URL
-    const scraperUrl = `http://api.scraperapi.com/?api_key=${SCRAPERAPI_KEY}&render=false&url=${encodeURIComponent(googleUrl)}`;
+    const scraperUrl = `http://api.scraperapi.com/?api_key=${SCRAPERAPI_KEY}&url=${encodeURIComponent(googleUrl)}`;
 
     console.log(`🌐 Fetching from ScraperAPI...`);
 
