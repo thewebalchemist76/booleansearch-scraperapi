@@ -65,9 +65,6 @@ app.post('/api/search', async (req, res) => {
     if (html.includes('unusual traffic') || html.includes('captcha')) {
       console.log('⚠️ WARNING: Possible captcha/block detected');
     }
-    
-    // DEBUG: Save a sample of the HTML
-    console.log('📝 HTML sample (first 500 chars):', html.substring(0, 500));
 
     // Parse Google results
     const results = parseGoogleResults(html, query);
@@ -129,17 +126,21 @@ function parseGoogleResults(html, originalQuery) {
         // Decode URL
         url = decodeURIComponent(url);
         
-        // STRICT FILTER: Remove ALL Google-related URLs
+        // ULTRA STRICT FILTER: Remove ALL Google-related URLs (all TLDs)
         const isGoogleUrl = 
-          url.includes('google.com') || 
-          url.includes('google.co') ||  // google.co.uk, google.co.id, etc.
-          url.includes('google.it') ||
+          url.match(/google\.(com|co|it|fr|de|es|nl|no|se|dk|fi|pl|ru|jp|cn|kr|in|br|mx|ar|au|nz|za|uk|ca|ie|ch|at|be|pt|gr|cz|hu|ro|bg|hr|sk|si|lt|lv|ee|is|lu|mt|cy)/i) ||
           url.includes('gstatic.com') ||
           url.includes('youtube.com') ||
+          url.includes('youtu.be') ||
           url.includes('webcache.googleusercontent.com') ||
+          url.includes('googleusercontent.com') ||
           url.includes('accounts.google') ||
           url.includes('policies.google') ||
-          url.includes('support.google');
+          url.includes('support.google') ||
+          url.includes('maps.google') ||
+          url.includes('translate.google') ||
+          url.includes('//www.google.') ||
+          url.includes('//google.');
         
         if (url.startsWith('http') && !isGoogleUrl) {
           urls.add(url);
@@ -191,9 +192,9 @@ function parseGoogleResults(html, originalQuery) {
 
   console.log(`📊 Parsed: ${urlArray.length} URLs, ${titles.length} titles, ${descriptions.length} descriptions`);
 
-  // Log first 3 URLs for debugging
+  // Log first 5 URLs for debugging
   if (urlArray.length > 0) {
-    console.log('🔗 First URLs found:', urlArray.slice(0, 3));
+    console.log('🔗 First URLs found:', urlArray.slice(0, 5));
   }
 
   // Combine results
