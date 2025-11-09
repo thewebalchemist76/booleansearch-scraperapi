@@ -43,6 +43,8 @@ app.post('/api/search', async (req, res) => {
     // ScraperAPI URL
     const scraperUrl = `http://api.scraperapi.com/?api_key=${SCRAPERAPI_KEY}&url=${encodeURIComponent(googleUrl)}`;
 
+    console.log(`🌐 Fetching from ScraperAPI...`);
+
     // Fetch from ScraperAPI
     const response = await fetch(scraperUrl);
     
@@ -58,6 +60,14 @@ app.post('/api/search', async (req, res) => {
 
     const html = await response.text();
     console.log(`📄 HTML received: ${html.length} chars`);
+    
+    // DEBUG: Check if we got actual Google results or a block page
+    if (html.includes('unusual traffic') || html.includes('captcha')) {
+      console.log('⚠️ WARNING: Possible captcha/block detected');
+    }
+    
+    // DEBUG: Save a sample of the HTML
+    console.log('📝 HTML sample (first 500 chars):', html.substring(0, 500));
 
     // Parse Google results
     const results = parseGoogleResults(html, query);
@@ -96,43 +106,88 @@ app.post('/api/search', async (req, res) => {
 function parseGoogleResults(html, originalQuery) {
   const results = [];
 
-  // Pattern 1: Extract URLs from Google search results
-  const urlRegex = /<a[^>]+href="\/url\?q=([^"&]+)[^"]*"/g;
-  let match;
-  const urls = [];
+  // Remove all newlines and extra spaces for easier parsing
+  const cleanHtml = html.replace(/\n/g, ' ').replace(/\s+/g, ' ');
 
-  while ((match = urlRegex.exec(html)) !== null) {
-    try {
-      const url = decodeURIComponent(match[1]);
-      if (url && !url.includes('google.com') && !url.includes('youtube.com') && url.startsWith('http')) {
-        urls.push(url);
+  // Pattern 1: Try multiple URL extraction patterns
+  const urlPatterns = [
+    // Standard Google result link
+    /href="\/url\?q=(https?:\/\/[^"&]+)/gi,
+    // Direct link pattern
+    /href="(https?:\/\/(?!google|youtube|webcache)[^"]+)"/gi,
+    // JSName pattern
+    /<a[^>]+jsname="[^"]*"[^>]+href="(https?:\/\/[^"]+)"/gi
+  ];
+
+  let urls = new Set(); // Use Set to avoid duplicates
+
+  for (const pattern of urlPatterns) {
+    let match;
+    while ((match = pattern.exec(cleanHtml)) !== null && urls.size < 20) {
+      try {
+        let url = match[1];
+        // Decode URL
+        url = decodeURIComponent(url);
+        
+        // Filter out Google/YouTube/cache URLs
+        if (url.startsWith('http') && 
+            !url.includes('google.com') && 
+            !url.includes('youtube.com') &&
+            !url.includes('webcache.googleusercontent.com')) {
+          urls.add(url);
+        }
+      } catch (e) {
+        // Skip invalid URLs
       }
-    } catch (e) {
-      // Skip invalid URLs
     }
   }
 
-  // Pattern 2: Extract titles (Google uses <h3> for result titles)
-  const titleRegex = /<h3[^>]*class="[^"]*"[^>]*>([^<]+)<\/h3>/g;
+  // Convert Set to Array
+  const urlArray = Array.from(urls);
+
+  // Pattern 2: Extract titles - try multiple patterns
+  const titlePatterns = [
+    /<h3[^>]*>([^<]+)<\/h3>/gi,
+    /<div[^>]*role="heading"[^>]*>([^<]+)<\/div>/gi,
+    /class="[^"]*LC20lb[^"]*"[^>]*>([^<]+)</gi
+  ];
+
   const titles = [];
-  
-  while ((match = titleRegex.exec(html)) !== null) {
-    titles.push(match[1].trim());
+  for (const pattern of titlePatterns) {
+    let match;
+    while ((match = pattern.exec(cleanHtml)) !== null && titles.length < 20) {
+      const title = match[1].trim().replace(/<[^>]+>/g, '');
+      if (title && title.length > 5) {
+        titles.push(title);
+      }
+    }
   }
 
-  // Pattern 3: Extract descriptions (snippets)
-  const descRegex = /<div[^>]*class="[^"]*VwiC3b[^"]*"[^>]*>([^<]+)<\/div>/g;
+  // Pattern 3: Extract descriptions
+  const descPatterns = [
+    /<div[^>]*class="[^"]*VwiC3b[^"]*"[^>]*>([^<]+)<\/div>/gi,
+    /<span[^>]*class="[^"]*st[^"]*"[^>]*>([^<]+)<\/span>/gi,
+    /<div[^>]*data-content-feature="[^"]*"[^>]*>([^<]+)<\/div>/gi
+  ];
+
   const descriptions = [];
-  
-  while ((match = descRegex.exec(html)) !== null) {
-    descriptions.push(match[1].trim());
+  for (const pattern of descPatterns) {
+    let match;
+    while ((match = pattern.exec(cleanHtml)) !== null && descriptions.length < 20) {
+      const desc = match[1].trim().replace(/<[^>]+>/g, '');
+      if (desc && desc.length > 10) {
+        descriptions.push(desc);
+      }
+    }
   }
+
+  console.log(`📊 Parsed: ${urlArray.length} URLs, ${titles.length} titles, ${descriptions.length} descriptions`);
 
   // Combine results
-  for (let i = 0; i < urls.length; i++) {
+  for (let i = 0; i < Math.min(urlArray.length, 10); i++) {
     results.push({
-      url: urls[i],
-      title: titles[i] || urls[i],
+      url: urlArray[i],
+      title: titles[i] || urlArray[i],
       description: descriptions[i] || '',
       similarity: calculateSimilarity(titles[i] || '', originalQuery)
     });
