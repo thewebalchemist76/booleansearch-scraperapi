@@ -129,11 +129,19 @@ function parseGoogleResults(html, originalQuery) {
         // Decode URL
         url = decodeURIComponent(url);
         
-        // Filter out Google/YouTube/cache URLs
-        if (url.startsWith('http') && 
-            !url.includes('google.com') && 
-            !url.includes('youtube.com') &&
-            !url.includes('webcache.googleusercontent.com')) {
+        // STRICT FILTER: Remove ALL Google-related URLs
+        const isGoogleUrl = 
+          url.includes('google.com') || 
+          url.includes('google.co') ||  // google.co.uk, google.co.id, etc.
+          url.includes('google.it') ||
+          url.includes('gstatic.com') ||
+          url.includes('youtube.com') ||
+          url.includes('webcache.googleusercontent.com') ||
+          url.includes('accounts.google') ||
+          url.includes('policies.google') ||
+          url.includes('support.google');
+        
+        if (url.startsWith('http') && !isGoogleUrl) {
           urls.add(url);
         }
       } catch (e) {
@@ -182,6 +190,11 @@ function parseGoogleResults(html, originalQuery) {
   }
 
   console.log(`📊 Parsed: ${urlArray.length} URLs, ${titles.length} titles, ${descriptions.length} descriptions`);
+
+  // Log first 3 URLs for debugging
+  if (urlArray.length > 0) {
+    console.log('🔗 First URLs found:', urlArray.slice(0, 3));
+  }
 
   // Combine results
   for (let i = 0; i < Math.min(urlArray.length, 10); i++) {
